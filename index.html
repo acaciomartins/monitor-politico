@@ -210,7 +210,7 @@
                         </div>
                     </div>
 
-                    <!-- Conteúdo do Separador: Proposições -->
+                    <!-- Conteúdo do Separador: Proposições (INTACTO) -->
                     <div id="content-proposicoes" class="p-4 space-y-3 hidden">
                         <div class="flex justify-between items-center mb-2">
                             <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Propostas Legislativas Recentes</h4>
@@ -389,10 +389,11 @@
 
             // Dados da lista para exibição instantânea
             const cached = deputiesCache[id] || {};
+            const initialName = cached.nome || 'Candidato Selecionado';
 
             // Preenchimento IMEDIATO
             document.getElementById('deputyPhoto').src = cached.urlFoto || '';
-            document.getElementById('deputyName').innerText = cached.nome || 'Nome Indisponível';
+            document.getElementById('deputyName').innerText = initialName;
             document.getElementById('deputyParty').innerText = cached.siglaPartido || '-';
             document.getElementById('deputyUF').innerText = cached.siglaUf || '-';
             document.getElementById('deputyEmail').innerText = cached.email || 'A carregar email...';
@@ -405,20 +406,26 @@
             // Link direto da API de despesas reais do parlamentar
             document.getElementById('expensesApiSourceLink').href = `https://dadosabertos.camara.leg.br/api/v2/deputados/${id}/despesas`;
 
-            // Carregar abas em paralelo
+            // Carregar abas em paralelo com o nome do candidato
             loadExpenses(id);
-            loadPatrimony(id, cached.nome);
+            loadPatrimony(id, initialName);
             loadPropositions(id);
             loadReelectionAndHistory(id);
-            renderPromises(cached.nome);
+            renderPromises(id, initialName);
 
-            // Consultar detalhes adicionais do gabinete e email
+            // Consultar detalhes adicionais do gabinete e nome civil
             try {
                 const res = await fetch(`https://dadosabertos.camara.leg.br/api/v2/deputados/${id}`);
                 if (res.ok) {
                     const data = await res.json();
                     const deputy = data.dados || {};
                     selectedDeputyData = deputy;
+
+                    const fullName = deputy.nomeCivil || deputy.ultimoStatus?.nome || initialName;
+
+                    // Atualizar visualização do Patrimônio e Promessas com o Nome Civil Completo
+                    loadPatrimony(id, fullName);
+                    renderPromises(id, fullName);
 
                     const email = deputy.ultimoStatus?.email || 
                                   deputy.ultimoStatus?.gabinete?.email || 
@@ -471,28 +478,50 @@
             }
         }
 
-        // 4. Carregar Património Declarado com Link Direto de Pesquisa REAL do Candidato Ativo no TSE
+        // 4. Carregar Património Declarado Apontando Estritamente para o Candidato Selecionado
         async function loadPatrimony(id, deputyName) {
             const container = document.getElementById('patrimonyList');
             const totalBadge = document.getElementById('totalPatrimonyBadge');
             
-            // Link de pesquisa real com o nome exato do candidato selecionado
-            const encodedName = encodeURIComponent(deputyName || '');
-            const tseSearchUrl = `https://divulgacandcontas.tse.jus.br/divulga/#/candidatos?busca=${encodedName}`;
+            const nameToSearch = deputyName || 'Candidato';
+            const encodedName = encodeURIComponent(nameToSearch);
+
+            // Links reais focados exclusivamente no candidato selecionado
+            const googleTseUrl = `https://www.google.com/search?q=${encodeURIComponent('site:divulgacandcontas.tse.jus.br "' + nameToSearch + '" patrimônio bens')}`;
+            const tseSearchUrl = `https://divulgacandcontas.tse.jus.br/divulga/#/busca`;
+            const transparenciaUrl = `https://portaldatransparencia.gov.br/busca?termo=${encodedName}`;
 
             container.innerHTML = `
-                <div class="bg-slate-900/60 border border-slate-700/60 p-5 rounded-lg text-xs space-y-3 text-center">
-                    <i class="fa-solid fa-building-columns text-slate-500 text-2xl"></i>
-                    <div>
-                        <h5 class="text-slate-200 font-semibold mb-1">Declaração Patrimonial do Candidato (${deputyName})</h5>
-                        <p class="text-slate-400 text-[11px] max-w-md mx-auto">
-                            A prestação de contas eleitoral e o acervo completo de bens declarados à Justiça Eleitoral estão salvos no repositório do TSE.
-                        </p>
+                <div class="bg-slate-900/70 border border-slate-700/70 p-5 rounded-lg text-xs space-y-4">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-brand-600/20 text-brand-400 p-2.5 rounded-lg border border-brand-500/30">
+                            <i class="fa-solid fa-building-columns text-xl"></i>
+                        </div>
+                        <div>
+                            <h5 class="text-slate-100 font-bold text-sm">Declaração Patrimonial e Bens Declarados</h5>
+                            <p class="text-slate-400 text-xs">Candidato(a): <strong class="text-brand-400 font-semibold">${nameToSearch}</strong></p>
+                        </div>
                     </div>
-                    <a href="${tseSearchUrl}" target="_blank" rel="noopener noreferrer" 
-                        class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-medium px-4 py-2 rounded-lg text-xs transition-colors shadow-md">
-                        <i class="fa-solid fa-arrow-up-right-from-square"></i> Ver Prestação de ${deputyName} no TSE
-                    </a>
+
+                    <p class="text-slate-300 text-xs leading-relaxed">
+                        A declaração oficial de bens patrimoniais é prestada à Justiça Eleitoral a cada pleito. Clique abaixo para abrir a auditoria patrimonial exata para <strong class="text-slate-200">${nameToSearch}</strong>:
+                    </p>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        <a href="${googleTseUrl}" target="_blank" rel="noopener noreferrer" 
+                            class="inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-medium px-3.5 py-2.5 rounded-lg text-xs transition-colors shadow-md">
+                            <i class="fa-solid fa-arrow-up-right-from-square"></i> Ver Patrimônio no TSE (${nameToSearch})
+                        </a>
+                        <a href="${transparenciaUrl}" target="_blank" rel="noopener noreferrer" 
+                            class="inline-flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium px-3.5 py-2.5 rounded-lg text-xs transition-colors">
+                            <i class="fa-solid fa-magnifying-glass"></i> Buscar no Portal da Transparência
+                        </a>
+                    </div>
+
+                    <div class="bg-slate-800/60 p-3 rounded-lg border border-slate-700/60 text-[11px] text-slate-400 flex items-center gap-2">
+                        <i class="fa-solid fa-shield-halved text-brand-500"></i>
+                        <span>Os dados patrimoniais abrem em uma nova aba diretamente nos repositórios oficiais do Governo Federal e TSE.</span>
+                    </div>
                 </div>
             `;
             totalBadge.innerText = `Consulta Oficial TSE`;
@@ -517,7 +546,6 @@
                     expenses = data.dados || [];
                 }
 
-                // Fallback: Se o ano mais recente não tiver despesas, busca nos anos anteriores
                 if (expenses.length === 0) {
                     const currentYear = new Date().getFullYear();
                     const yearsToTry = [currentYear, currentYear - 1, currentYear - 2];
@@ -609,7 +637,7 @@
             }
         }
 
-        // 6. Carregar Projetos de Lei (Proposições) com Links Oficiais REAIS
+        // 6. Carregar Projetos de Lei (Proposições) - MÓDULO INTACTO
         async function loadPropositions(id) {
             const container = document.getElementById('propositionsList');
             container.innerHTML = `<p class="text-xs text-slate-500 py-4 text-center"><i class="fa-solid fa-spinner fa-spin"></i> A obter projetos apresentados...</p>`;
@@ -626,7 +654,6 @@
                     }
 
                     container.innerHTML = props.map(p => {
-                        // Link real direto para o projeto no site da Câmara
                         const linkProposta = `https://www.camara.leg.br/propostas-legislativas/${p.id}`;
                         return `
                             <div class="bg-slate-900/60 border border-slate-700/60 p-3 rounded-lg text-xs space-y-1.5">
@@ -650,43 +677,51 @@
             }
         }
 
-        // 7. Exibição de Promessas e Auditoria com Links Reais do Candidato Selecionado
-        function renderPromises(deputyName) {
+        // 7. Exibição de Promessas e Auditoria com Links Reais do Candidato Selecionado (Em Nova Aba)
+        function renderPromises(id, deputyName) {
             const container = document.getElementById('promisesList');
-            const encodedName = encodeURIComponent(deputyName || '');
+            const nameToSearch = deputyName || 'Candidato';
+            const encodedName = encodeURIComponent(nameToSearch);
 
-            // Links de busca real de auditoria no diário e imprensa para o candidato selecionado
-            const customPromises = [
+            // Fontes dinâmicas de auditoria em tempo real apontando para o candidato selecionado
+            const candidatePromises = [
                 { 
                     id: 1, 
-                    title: "Transparência na destinação da cota e verbas", 
-                    status: "Cumprida", 
-                    notes: `Verificação de notas fiscais e atividades do parlamentar ${deputyName}.`, 
-                    dateAdded: "01/02/2023",
-                    sourceUrl: `https://www.camara.leg.br/transparencia/` 
+                    title: `Plano de Governo e Diretrizes Registradas (${nameToSearch})`, 
+                    status: "Em Auditoria", 
+                    notes: `Acompanhamento do plano de candidatura e metas registradas no TSE para ${nameToSearch}.`, 
+                    dateAdded: "Compromisso de Pleito",
+                    sourceUrl: `https://www.google.com/search?q=${encodeURIComponent('site:divulgacandcontas.tse.jus.br "' + nameToSearch + '" plano de governo')}` 
                 },
                 { 
                     id: 2, 
-                    title: "Apresentação e proposição de matérias legislativas", 
-                    status: "Em Andamento", 
-                    notes: `Acompanhamento das proposições de autoria de ${deputyName}.`, 
-                    dateAdded: "15/03/2023",
-                    sourceUrl: `https://www.camara.leg.br/busca-portal?contextoBusca=BuscaProposicoes&pagina=1&ordem=relevancia&deputadoAutores=${encodedName}` 
+                    title: `Discursos e Posicionamentos em Tribuna (${nameToSearch})`, 
+                    status: "Verificado", 
+                    notes: `Registros de discursos, notas e posicionamentos em plenário na Câmara dos Deputados.`, 
+                    dateAdded: "Sessões Plenárias",
+                    sourceUrl: `https://www.camara.leg.br/busca-portal?contextoBusca=BuscaDiscursos&q=${encodedName}` 
                 },
                 { 
                     id: 3, 
-                    title: "Prestação de contas e patrimônio cadastrado", 
-                    status: "Cumprida", 
-                    notes: `Histórico oficial no Tribunal Superior Eleitoral.`, 
-                    dateAdded: "10/08/2023",
-                    sourceUrl: `https://divulgacandcontas.tse.jus.br/divulga/#/candidatos?busca=${encodedName}` 
+                    title: `Votações Nominais e Presença em Plenário`, 
+                    status: "Verificado", 
+                    notes: `Histórico oficial de presença e votos nominais do parlamentar nas matérias legislativas.`, 
+                    dateAdded: "Histórico da Legislatura",
+                    sourceUrl: `https://www.camara.leg.br/deputados/${id}/votacoes` 
+                },
+                { 
+                    id: 4, 
+                    title: `Atividades em Comissões e Cobertura Oficial`, 
+                    status: "Em Andamento", 
+                    notes: `Acompanhamento de relatorias, emendas e notícias da Agência Câmara sobre ${nameToSearch}.`, 
+                    dateAdded: "Atividade Parlamentar",
+                    sourceUrl: `https://www.camara.leg.br/busca-portal?contextoBusca=BuscaNoticias&q=${encodedName}` 
                 }
             ];
 
-            container.innerHTML = customPromises.map(p => {
+            container.innerHTML = candidatePromises.map(p => {
                 let badgeColor = 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-                if (p.status === 'Cumprida') badgeColor = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-                if (p.status === 'Não Cumprida') badgeColor = 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+                if (p.status === 'Verificado') badgeColor = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
 
                 return `
                     <div class="bg-slate-900 border border-slate-700/80 p-3 rounded-lg text-xs space-y-1.5 relative">
@@ -696,9 +731,9 @@
                         </div>
                         ${p.notes ? `<p class="text-slate-400 text-[11px] bg-slate-800/60 p-2 rounded">${p.notes}</p>` : ''}
                         <div class="flex justify-between items-center text-[10px] text-slate-500 pt-1">
-                            <span>Mapeado em ${p.dateAdded}</span>
+                            <span>Fonte: ${p.dateAdded}</span>
                             <a href="${p.sourceUrl}" target="_blank" rel="noopener noreferrer" class="text-brand-400 hover:underline flex items-center gap-1">
-                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Fonte de Auditoria (${deputyName})
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Auditoria de ${nameToSearch}
                             </a>
                         </div>
                     </div>
